@@ -4,7 +4,7 @@ Un plugin de WordPress que permite acceder ao dicionario oficial da Real Academi
 
 ## Aviso legal
 
-Este plugin foi desenvolvido unicamente con fins educativos e experimentais. O seu propósito é demostrar como se pode integrar información léxica nun sitio web WordPress.
+Este plugin desenvolveuse unicamente con fins educativos e experimentais. O seu propósito é demostrar como se pode integrar información léxica nun sitio web WordPress.
 
 Este plugin realiza scraping da web da Real Academia Galega (https://www.academia.gal), pero esa web está protexida por dereitos de propiedade intelectual e prohíbe explicitamente a extracción, reutilización ou redistribución dos seus contidos, segundo o seu aviso legal oficial.
 
