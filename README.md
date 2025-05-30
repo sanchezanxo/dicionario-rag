@@ -2,6 +2,18 @@
 
 Un plugin de WordPress que permite acceder ao dicionario oficial da Real Academia Galega (RAG) cunha interface moderna e responsiva.
 
+## Aviso legal
+
+Este plugin foi desenvolvido unicamente con fins educativos e experimentais. O seu propósito é demostrar como se pode integrar información léxica nun sitio web WordPress.
+
+Este plugin realiza scraping da web da Real Academia Galega (https://www.academia.gal), pero esa web está protexida por dereitos de propiedade intelectual e prohíbe explicitamente a extracción, reutilización ou redistribución dos seus contidos, segundo o seu aviso legal oficial.
+
+O uso deste plugin para acceder, extraer ou mostrar contidos da web da RAG sen autorización expresa pode violar as súas condicións de uso e/ou a lexislación vixente.
+
+O autor deste plugin **non se responsabiliza do uso que cada persoa faga del**. Cada usuario é o único responsable de asegurarse de cumprir coa legalidade e coas condicións de uso dos sitios web cos que interactúe.
+
+Recoméndase encarecidamente solicitar permiso á Real Academia Galega antes de empregar este plugin para acceder aos seus contidos. https://github.com/sanchezanxo/dicionario-rag/blob/main/README.md
+
 ## Descrición
 
 Este plugin permite aos usuarios buscar definicións de palabras en galego e conxugacións verbais directamente dende o teu sitio WordPress. Conéctase á API oficial do dicionario da RAG e mostra os resultados nun formato limpo e adaptado a móbiles.
