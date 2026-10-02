@@ -16,14 +16,14 @@ Recoméndase encarecidamente solicitar permiso á Real Academia Galega antes de 
 
 ## Descrición
 
-Este plugin permite aos usuarios buscar definicións de palabras en galego e conxugacións verbais directamente dende o teu sitio WordPress. Conéctase á API oficial do dicionario da RAG e mostra os resultados nun formato limpo e adaptado a móbiles.
+Este plugin permite aos usuarios buscar definicións de palabras en galego e conxugacións verbais directamente dende o teu sitio WordPress. Consulta a web oficial do dicionario da RAG e mostra os resultados nun formato limpo e adaptado a móbiles.
 
 ## Funcionalidades
 
 - Busca de definicións de palabras galegas  
 - Conxugacións verbais completas  
 - Deseño responsivo para todos os dispositivos  
-- Interface limpa e moderna  
+- Interface que herda os estilos do tema  
 - Fonte de datos oficial da RAG  
 - Buscas mediante AJAX  
 - Integración con shortcode  
@@ -53,10 +53,26 @@ Os usuarios poden:
 ## Detalles técnicos
 
 - Conexión coa web de academia.gal  
-- Peticións AJAX seguras con validación por nonce  
+- Caché das consultas (transients) e límite de peticións por IP para non sobrecargar a web da RAG  
+- HTML da RAG filtrado con `wp_kses`, entrada validada e saída escapada  
+- O CSS e o JS só se cargan nas páxinas co shortcode  
 - Disposición responsiva mediante CSS grid  
-- Entrada saneada e saída escapada  
 - Xestión de erros e rexistro de logs  
+
+## Estilos
+
+O plugin herda a tipografía, as cores, os botóns e os títulos do tema activo, tanto en temas clásicos como de bloques. As cores secundarias (bordos e fondos) calcúlanse a partir da cor do texto, polo que funcionan tamén en temas escuros.
+
+Para axustalo dende o tema pódense sobrescribir estas variables CSS:
+
+```css
+.dicionario-rag-container {
+    --dicionario-rag-accent: var(--wp--preset--color--accent-1);
+    --dicionario-rag-radius: 0;
+}
+```
+
+Variables dispoñibles: `--dicionario-rag-accent`, `--dicionario-rag-border`, `--dicionario-rag-surface`, `--dicionario-rag-muted`, `--dicionario-rag-error`, `--dicionario-rag-radius`, `--dicionario-rag-gap` e `--dicionario-rag-small`.
 
 ## Capturas de pantalla
 
@@ -66,6 +82,9 @@ Os usuarios poden:
 4. Vista responsiva en dispositivos móbiles  
 
 ## Rexistro de cambios
+
+### 1.1.0  
+- Estilos que herdan do tema, caché, límite de peticións, filtrado do HTML da RAG e corrección do parseado das definicións. Detalles en [CHANGELOG.md](CHANGELOG.md)
 
 ### 1.0.0  
 - Versión inicial  

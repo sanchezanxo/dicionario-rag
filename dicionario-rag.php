@@ -3,15 +3,14 @@
 Plugin Name: Dicionario RAG - Acceso ao Dicionario da Real Academia Galega
 Plugin URI: https://github.com/sanchezanxo/dicionario-rag
 Description: Plugin de WordPress que permite acceder ao dicionario oficial da Real Academia Galega vía interface gráfica, ante a ausencia de API pública. Inclúe definicións, conxugacións verbais e funcionalidade completa.
-Version: 1.0.0
+Version: 1.1.0
 Author: Anxo Sanchez Garcia
 Author URI: https://www.anxosanchez.com
 License: GPL v2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Text Domain: dicionario-rag
-Domain Path: /languages
 Requires at least: 5.0
-Tested up to: 6.4
+Tested up to: 7.1
 Requires PHP: 7.4
 
 Este programa é software libre; podes redistribuílo e/ou modificalo  
@@ -32,15 +31,35 @@ if (!defined('ABSPATH')) {
 }
 
 // Definir constantes do plugin para evitar hardcoding de valores
-define('ASG_DICIONARIO_RAG_VERSION', '1.0.0');
+define('ASG_DICIONARIO_RAG_VERSION', '1.1.0');
 define('ASG_DICIONARIO_RAG_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASG_DICIONARIO_RAG_PLUGIN_PATH', plugin_dir_path(__FILE__));
 define('ASG_DICIONARIO_RAG_TEXT_DOMAIN', 'dicionario-rag');
 
 // URLs e configuración da RAG
 define('ASG_DICIONARIO_RAG_BASE_URL', 'https://academia.gal/dicionario');
-define('ASG_DICIONARIO_RAG_TIMEOUT', 30);
-define('ASG_DICIONARIO_RAG_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+define('ASG_DICIONARIO_RAG_TIMEOUT', 15);
+define('ASG_DICIONARIO_RAG_USER_AGENT', 'DicionarioRAG-WordPress/' . ASG_DICIONARIO_RAG_VERSION . ' (+https://github.com/sanchezanxo/dicionario-rag)');
+
+// Caché e límite de peticións á RAG
+define('ASG_DICIONARIO_RAG_CACHE_TTL', WEEK_IN_SECONDS);
+define('ASG_DICIONARIO_RAG_CACHE_TTL_NON_ATOPADO', DAY_IN_SECONDS);
+define('ASG_DICIONARIO_RAG_TOKEN_TTL', 12 * HOUR_IN_SECONDS);
+define('ASG_DICIONARIO_RAG_LIMITE_PETICIONS', 30);      // peticións á RAG por IP...
+define('ASG_DICIONARIO_RAG_LIMITE_XANELA', 10 * MINUTE_IN_SECONDS); // ...nesta xanela de tempo
+
+/**
+ * Pasar a minúsculas respectando os acentos (PÓR -> pór)
+ * 
+ * WordPress non inclúe polyfill de mb_strtolower, así que se a
+ * extensión mbstring non está dispoñible úsase strtolower.
+ * 
+ * @param string $texto Texto orixinal
+ * @return string Texto en minúsculas
+ */
+function asg_dicionario_rag_minusculas($texto) {
+    return function_exists('mb_strtolower') ? mb_strtolower($texto, 'UTF-8') : strtolower($texto);
+}
 
 /**
  * Clase principal do plugin Dicionario RAG
@@ -57,45 +76,32 @@ class ASG_DicionarioRAG {
      * Constructor da clase principal
      * 
      * Rexistra todos os hooks necesarios para o funcionamento do plugin:
-     * - Carga de assets no frontend
+     * - Rexistro de assets no frontend (só se cargan se hai shortcode)
      * - Creación do shortcode
      * - Manexo de peticións AJAX (para usuarios logueados e anónimos)
-     * - Hook de desinstalación
      */
     public function __construct() {
-        // Hooks de inicialización
-        add_action('wp_enqueue_scripts', array($this, 'asg_enqueue_assets'));
+        add_action('wp_enqueue_scripts', array($this, 'asg_rexistrar_assets'));
         add_shortcode('dicionario_rag', array($this, 'asg_mostrar_formulario'));
         add_action('wp_ajax_asg_consultar_rag', array($this, 'asg_manejar_consulta_ajax'));
         add_action('wp_ajax_nopriv_asg_consultar_rag', array($this, 'asg_manejar_consulta_ajax'));
-        
-        // Hook de desinstalación
-        register_uninstall_hook(__FILE__, array('ASG_DicionarioRAG', 'asg_uninstall'));
     }
     
     /**
-     * Cargar e rexistrar os assets (CSS e JavaScript) do plugin
+     * Rexistrar os assets (CSS e JavaScript) do plugin
      * 
-     * Esta función carga os ficheiros CSS e JS necesarios para o funcionamento
-     * do plugin no frontend, inclúe:
-     * - Estilos CSS para a interface
-     * - Script JavaScript para funcionalidade AJAX
-     * - Variables localizadas (URL AJAX e nonce de seguridade)
+     * Só se rexistran aquí; cárganse dende o shortcode para non engadir
+     * CSS nin JS nas páxinas que non usan o dicionario.
      */
-    public function asg_enqueue_assets() {
-        // Cargar jQuery (dependencia)
-        wp_enqueue_script('jquery');
-        
-        // CSS do plugin
-        wp_enqueue_style(
+    public function asg_rexistrar_assets() {
+        wp_register_style(
             'asg-dicionario-rag-css',
             ASG_DICIONARIO_RAG_PLUGIN_URL . 'assets/css/dicionario-rag.css',
             array(),
             ASG_DICIONARIO_RAG_VERSION
         );
         
-        // JavaScript do plugin
-        wp_enqueue_script(
+        wp_register_script(
             'asg-dicionario-rag-js',
             ASG_DICIONARIO_RAG_PLUGIN_URL . 'assets/js/dicionario-rag.js',
             array('jquery'),
@@ -103,56 +109,60 @@ class ASG_DicionarioRAG {
             true
         );
         
-        // Localizar script con variables necesarias para AJAX
+        // Non se usa nonce: é unha consulta pública de só lectura e os nonces
+        // caducan nas páxinas cacheadas. O abuso contrólase co límite por IP.
         wp_localize_script('asg-dicionario-rag-js', 'dicionario_vars', array(
-            'ajaxurl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('asg_dicionario_rag_nonce')
+            'ajaxurl' => admin_url('admin-ajax.php')
         ));
     }
     
     /**
      * Render do shortcode [dicionario_rag]
      * 
-     * Esta función xenera o HTML do formulario de busca que se mostra
-     * no frontend cando se usa o shortcode. Inclúe:
-     * - Formulario con input de texto
-     * - Botóns para definición e conxugación
-     * - Elementos para mostrar loading e resultados
-     * - HTML semántico e accesible
+     * Xera o HTML do formulario de busca. Pode haber varias instancias
+     * na mesma páxina, por iso non se usan IDs fixos.
      * 
      * @return string HTML do formulario de busca
      */
     public function asg_mostrar_formulario() {
+        static $instancia = 0;
+        $instancia++;
+        $input_id = 'dicionario-rag-palabra-' . $instancia;
+        
+        wp_enqueue_style('asg-dicionario-rag-css');
+        wp_enqueue_script('asg-dicionario-rag-js');
+        
         ob_start();
         ?>
-        <div class="dicionario-rag-container">            
-            <form id="dicionario-form" role="search">
-                <div class="form-group">
-                    <label for="palabra-input">
-                        <?php echo esc_html__('Introduce unha palabra en galego:', ASG_DICIONARIO_RAG_TEXT_DOMAIN); ?>
-                    </label>
+        <div class="dicionario-rag-container">
+            <form class="dicionario-rag-form" role="search">
+                <label for="<?php echo esc_attr($input_id); ?>">
+                    <?php echo esc_html__('Introduce unha palabra en galego:', ASG_DICIONARIO_RAG_TEXT_DOMAIN); ?>
+                </label>
+                <div class="dicionario-rag-campos">
                     <input 
                         type="text" 
-                        id="palabra-input" 
+                        id="<?php echo esc_attr($input_id); ?>"
+                        class="dicionario-rag-input"
                         placeholder="<?php echo esc_attr__('Exemplo: comer', ASG_DICIONARIO_RAG_TEXT_DOMAIN); ?>" 
                         required 
                         maxlength="100"
                         autocomplete="off"
                     >
-                    <button type="submit" id="consultar-btn">
+                    <button type="submit" class="dicionario-rag-definicion wp-element-button">
                         <?php echo esc_html__('Definición', ASG_DICIONARIO_RAG_TEXT_DOMAIN); ?>
                     </button>
-                    <button type="button" id="conxugar-btn">
+                    <button type="button" class="dicionario-rag-conxugar wp-element-button">
                         <?php echo esc_html__('Conxugación', ASG_DICIONARIO_RAG_TEXT_DOMAIN); ?>
                     </button>
                 </div>
             </form>
             
-            <div id="loading" style="display: none;" role="status" aria-live="polite">
-                <p><?php echo esc_html__('🔄 Consultando o dicionario da RAG...', ASG_DICIONARIO_RAG_TEXT_DOMAIN); ?></p>
+            <div class="dicionario-rag-loading" hidden role="status" aria-live="polite">
+                <p><?php echo esc_html__('Consultando o dicionario da RAG…', ASG_DICIONARIO_RAG_TEXT_DOMAIN); ?></p>
             </div>
             
-            <div id="resultado" role="region" aria-live="polite"></div>
+            <div class="dicionario-rag-resultado" role="region" aria-live="polite"></div>
         </div>
         <?php
         return ob_get_clean();
@@ -161,54 +171,55 @@ class ASG_DicionarioRAG {
     /**
      * Manejar peticións AJAX para consultas ao dicionario
      * 
-     * Esta función procesa as peticións AJAX que veñen do frontend para:
-     * - Verificar a seguridade mediante nonce
-     * - Sanitizar e validar os datos de entrada
-     * - Delegas a consulta á clase ASG_DicionarioRAGConsulta 
-     * - Devolver resposta JSON ao frontend
-     * - Manexar erros e excepcións de forma segura
+     * - Valida os datos de entrada
+     * - Devolve a resposta da caché se existe
+     * - Aplica un límite de peticións por IP antes de consultar á RAG
+     * - Delega a consulta á clase ASG_DicionarioRAGConsulta
      */
     public function asg_manejar_consulta_ajax() {
-        // Verificar nonce de seguridade
-        if (!wp_verify_nonce($_POST['nonce'] ?? '', 'asg_dicionario_rag_nonce')) {
-            wp_send_json_error(esc_html__('Erro de seguridade', ASG_DICIONARIO_RAG_TEXT_DOMAIN));
-            return;
-        }
+        $palabra = trim(sanitize_text_field(wp_unslash($_POST['palabra'] ?? '')));
+        $tipo = sanitize_key(wp_unslash($_POST['tipo'] ?? 'definicion'));
         
-        // Sanitizar e validar inputs
-        $palabra = sanitize_text_field($_POST['palabra'] ?? '');
-        $tipo = sanitize_text_field($_POST['tipo'] ?? 'definicion');
-        
-        // Validacións de entrada
-        if (empty($palabra)) {
+        if ($palabra === '') {
             wp_send_json_error(esc_html__('Non se proporcionou ningunha palabra', ASG_DICIONARIO_RAG_TEXT_DOMAIN));
-            return;
         }
         
-        if (strlen($palabra) > 100) {
+        if (mb_strlen($palabra) > 100) {
             wp_send_json_error(esc_html__('A palabra é demasiado longa', ASG_DICIONARIO_RAG_TEXT_DOMAIN));
-            return;
         }
         
-        if (!in_array($tipo, ['definicion', 'conxugacion'])) {
+        if (!in_array($tipo, array('definicion', 'conxugacion'), true)) {
             wp_send_json_error(esc_html__('Tipo de consulta non válido', ASG_DICIONARIO_RAG_TEXT_DOMAIN));
-            return;
         }
         
-        // Crear instancia da clase de consulta
-        $dicionario = new ASG_DicionarioRAGConsulta ();
+        // Só letras (con acentos), espazos, guións e apóstrofos.
+        // Os verbos teñen que ser unha soa palabra porque van na ruta do ficheiro.
+        $patron = $tipo === 'conxugacion' ? '/^[\p{L}\p{M}\-]+$/u' : "/^[\\p{L}\\p{M}\\s'’\\-]+$/u";
+        if (!preg_match($patron, $palabra)) {
+            wp_send_json_error(esc_html__('A palabra contén caracteres non válidos', ASG_DICIONARIO_RAG_TEXT_DOMAIN));
+        }
+        
+        // Caché: as entradas do dicionario cambian moi pouco
+        $clave_cache = 'asg_drag_' . md5(ASG_DICIONARIO_RAG_VERSION . '|' . $tipo . '|' . asg_dicionario_rag_minusculas($palabra));
+        $cache = get_transient($clave_cache);
+        if ($cache !== false) {
+            if ($cache === 'non_atopado') {
+                wp_send_json_error(esc_html__('Non se atopou información para esta palabra', ASG_DICIONARIO_RAG_TEXT_DOMAIN));
+            }
+            wp_send_json_success($cache);
+        }
+        
+        if (!$this->asg_dentro_do_limite()) {
+            wp_send_json_error(esc_html__('Demasiadas consultas. Agarda uns minutos e inténtao de novo.', ASG_DICIONARIO_RAG_TEXT_DOMAIN));
+        }
+        
+        $dicionario = new ASG_DicionarioRAGConsulta();
         
         try {
             if ($tipo === 'conxugacion') {
                 $resultado = $dicionario->asg_buscarConxugacion($palabra);
             } else {
                 $resultado = $dicionario->asg_buscarPalabra($palabra);
-            }
-            
-            if ($resultado) {
-                wp_send_json_success($resultado);
-            } else {
-                wp_send_json_error(esc_html__('Non se atopou información para esta palabra', ASG_DICIONARIO_RAG_TEXT_DOMAIN));
             }
         } catch (Exception $e) {
             // Log do erro (só en modo debug)
@@ -217,76 +228,103 @@ class ASG_DicionarioRAG {
             }
             wp_send_json_error(esc_html__('Erro interno. Inténtao de novo máis tarde.', ASG_DICIONARIO_RAG_TEXT_DOMAIN));
         }
+        
+        if ($resultado) {
+            set_transient($clave_cache, $resultado, ASG_DICIONARIO_RAG_CACHE_TTL);
+            wp_send_json_success($resultado);
+        }
+        
+        set_transient($clave_cache, 'non_atopado', ASG_DICIONARIO_RAG_CACHE_TTL_NON_ATOPADO);
+        wp_send_json_error(esc_html__('Non se atopou información para esta palabra', ASG_DICIONARIO_RAG_TEXT_DOMAIN));
     }
     
     /**
-     * Función de desinstalación do plugin
+     * Límite de peticións á RAG por IP
      * 
-     * Esta función execútase cando se desinstala o plugin e serve para:
-     * - Limpar datos almacenados polo plugin (actualmente non hai ningún)
-     * - Eliminar opcións da base de datos se é necesario
-     * - Realizar limpeza xeral de recursos do plugin
+     * Só conta as consultas que non están na caché, é dicir, as que
+     * realmente xeran tráfico cara á web da RAG.
      * 
-     * @static
+     * @return bool true se a IP aínda pode facer peticións
      */
-    public static function asg_uninstall() {
-        // Limpar datos do plugin se é necesario
-        // (De momento non hai datos que limpar)
+    private function asg_dentro_do_limite() {
+        $ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : '';
+        $clave = 'asg_drag_rl_' . md5($ip);
+        $peticions = (int) get_transient($clave);
         
-        // Exemplo para futuras opcións:
-        // delete_option('asg_dicionario_rag_opcions');
+        if ($peticions >= ASG_DICIONARIO_RAG_LIMITE_PETICIONS) {
+            return false;
+        }
+        
+        set_transient($clave, $peticions + 1, ASG_DICIONARIO_RAG_LIMITE_XANELA);
+        return true;
     }
 }
 
 /**
  * Clase para xestionar consultas ao dicionario da Real Academia Galega
  * 
- * Esta clase encapsula toda a lóxica para comunicarse coa API da RAG:
- * - Xestión de peticións HTTP con cURL
+ * Esta clase encapsula toda a lóxica para comunicarse coa web da RAG:
+ * - Peticións HTTP coa API HTTP de WordPress
  * - Parseado de respostas HTML/JSON
  * - Extracción de datos estruturados
  * - Manexo de autenticación (authToken)
- * - Sanitización de dados recibidos
+ * - Sanitización de datos recibidos
  */
 class ASG_DicionarioRAGConsulta {
     private $baseUrl;
-    private $headers;
     private $timeout;
+    private $tokenDaCache = false;
 
     /**
      * Constructor da clase de consultas ao dicionario
-     * 
-     * Inicializa as propiedades da clase con valores das constantes
-     * definidas anteriormente, configurando:
-     * - URL base da RAG
-     * - Headers HTTP necesarios para simular un navegador
-     * - Timeout para peticións HTTP
      */
     public function __construct() {
         $this->baseUrl = ASG_DICIONARIO_RAG_BASE_URL;
         $this->timeout = ASG_DICIONARIO_RAG_TIMEOUT;
-        $this->headers = array(
-            'User-Agent: ' . ASG_DICIONARIO_RAG_USER_AGENT,
-            'Accept: application/json, text/javascript, */*',
-            'Accept-Language: gl-ES,gl;q=0.8,en-US;q=0.5,en;q=0.3',
-            'X-Requested-With: XMLHttpRequest',
-            'Content-Type: application/x-www-form-urlencoded; charset=UTF-8',
-            'Origin: https://academia.gal',
-            'Connection: keep-alive',
-            'Referer: https://academia.gal/dicionario'
-        );
+    }
+
+    /**
+     * Facer unha petición POST á RAG e devolver o corpo da resposta
+     * 
+     * Usa a API HTTP de WordPress, que respecta a configuración de proxy
+     * do sitio e descomprime as respostas automaticamente.
+     * 
+     * @param array $params Parámetros da URL (portlet de Liferay)
+     * @param array $formData Datos do formulario
+     * @param array $headers Headers adicionais
+     * @return string Corpo da resposta
+     * @throws Exception Se hai erros de comunicación coa RAG
+     */
+    private function asg_peticion($params, $formData, $headers = array()) {
+        $resposta = wp_remote_post($this->baseUrl . '?' . http_build_query($params), array(
+            'timeout' => $this->timeout,
+            'user-agent' => ASG_DICIONARIO_RAG_USER_AGENT,
+            'headers' => array_merge(array(
+                'Accept' => 'application/json, text/javascript, */*',
+                'Accept-Language' => 'gl-ES,gl;q=0.8',
+                'X-Requested-With' => 'XMLHttpRequest',
+                'Content-Type' => 'application/x-www-form-urlencoded; charset=UTF-8',
+                'Origin' => 'https://academia.gal',
+                'Referer' => 'https://academia.gal/dicionario',
+                'Cookie' => 'COOKIE_SUPPORT=true; GUEST_LANGUAGE_ID=gl_ES'
+            ), $headers),
+            'body' => $formData
+        ));
+
+        if (is_wp_error($resposta)) {
+            throw new Exception("Erro HTTP: " . $resposta->get_error_message());
+        }
+
+        $httpCode = wp_remote_retrieve_response_code($resposta);
+        if ($httpCode !== 200) {
+            throw new Exception("Erro HTTP: " . $httpCode);
+        }
+
+        return wp_remote_retrieve_body($resposta);
     }
 
     /**
      * Buscar definicións dunha palabra no dicionario da RAG
-     * 
-     * Esta función realiza unha consulta á RAG para obter as definicións
-     * dunha palabra galega específica. O proceso inclúe:
-     * - Construción da petición HTTP POST
-     * - Envío da consulta á API da RAG
-     * - Procesamento da resposta JSON/HTML
-     * - Extracción e estruturación das definicións
-     * - Manexo de erros e casos excepcionais
      * 
      * @param string $palabra A palabra en galego para buscar
      * @return array|null Array con definicións estruturadas ou null se non se atopa
@@ -300,49 +338,21 @@ class ASG_DicionarioRAGConsulta {
             error_log("ASG Dicionario: Buscando palabra - " . $palabra);
         }
         
-        // Parámetros da URL para a consulta
-        $params = http_build_query(array(
-            'p_p_id' => 'com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet',
-            'p_p_lifecycle' => '2',
-            'p_p_state' => 'normal',
-            'p_p_mode' => 'view',
-            'p_p_cacheability' => 'cacheLevelPage',
-            '_com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet_cmd' => 'cmdNormalSearch',
-            '_com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet_renderMode' => 'load',
-            '_com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet_nounTitle' => $palabra
-        ));
-
-        // Datos do formulario para enviar por POST
-        $formData = http_build_query(array(
-            '_com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet_fieldSearchNoun' => $palabra
-        ));
-
-        // Configurar e executar petición cURL
-        $ch = curl_init();
-        curl_setopt_array($ch, array(
-            CURLOPT_URL => $this->baseUrl . '?' . $params,
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => $formData,
-            CURLOPT_HTTPHEADER => $this->headers,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_TIMEOUT => $this->timeout
-        ));
-
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $error = curl_error($ch);
-        curl_close($ch);
-
-        // Manexo de erros da petición
-        if ($error) {
-            throw new Exception("Erro cURL: " . $error);
-        }
-
-        if ($httpCode !== 200) {
-            throw new Exception("Erro HTTP: " . $httpCode);
-        }
+        $response = $this->asg_peticion(
+            array(
+                'p_p_id' => 'com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet',
+                'p_p_lifecycle' => '2',
+                'p_p_state' => 'normal',
+                'p_p_mode' => 'view',
+                'p_p_cacheability' => 'cacheLevelPage',
+                '_com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet_cmd' => 'cmdNormalSearch',
+                '_com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet_renderMode' => 'load',
+                '_com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet_nounTitle' => $palabra
+            ),
+            array(
+                '_com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet_fieldSearchNoun' => $palabra
+            )
+        );
 
         if (!$response) {
             return null;
@@ -354,16 +364,9 @@ class ASG_DicionarioRAGConsulta {
     /**
      * Parsear resposta JSON da RAG para extraer datos das definicións
      * 
-     * Esta función procesa a resposta JSON que devolve a RAG e extrae
-     * a información relevante das definicións. Inclúe:
-     * - Decodificación do JSON
-     * - Validación da estrutura de datos
-     * - Extracción do contido HTML
-     * - Delegación ao parseador de HTML
-     * 
      * @param string $data Resposta JSON da RAG
      * @param string $palabra Palabra orixinal consultada
-     * @return array|null Datos estruturados ou null se non hai contido
+     * @return array|null Lista de entradas ou null se non hai contido
      */
     private function asg_parsearResposta($data, $palabra) {
         $json = json_decode($data, true);
@@ -371,48 +374,32 @@ class ASG_DicionarioRAGConsulta {
         if (!$json || !isset($json['items']) || empty($json['items'])) {
             return null;
         }
-/*
-        $item = $json['items'][0];
-        $htmlContent = isset($item['htmlContent']) ? $item['htmlContent'] : '';
-        $title = isset($item['title']) ? $item['title'] : $palabra;
-        
-        if (!$htmlContent) {
-            return null;
-        }
 
-        return $this->asg_parsearHTML($htmlContent, $title); */
-		
-    $entradas = array();
-    
-    foreach ($json['items'] as $item) {
-        $htmlContent = isset($item['htmlContent']) ? $item['htmlContent'] : '';
-        $title = isset($item['title']) ? $item['title'] : $palabra;
+        $entradas = array();
         
-        if ($htmlContent) {
-            $entrada = $this->asg_parsearHTML($htmlContent, $title);
-            if ($entrada) {
-                $entradas[] = $entrada;
+        foreach ($json['items'] as $item) {
+            $htmlContent = isset($item['htmlContent']) ? $item['htmlContent'] : '';
+            $title = isset($item['title']) ? $item['title'] : $palabra;
+            
+            if ($htmlContent) {
+                $entrada = $this->asg_parsearHTML($htmlContent, $title);
+                if ($entrada) {
+                    $entradas[] = $entrada;
+                }
             }
         }
-    }
-    
-    // Devolver todas as entradas ou null se non hai ningunha
-    return !empty($entradas) ? $entradas : null;		
-		
-		
-		
+        
+        // Devolver todas as entradas ou null se non hai ningunha
+        return !empty($entradas) ? $entradas : null;
     }
 
     /**
      * Parsear contido HTML da RAG para extraer definicións estruturadas
      * 
-     * Esta función usa DOMDocument e XPath para extraer información
-     * estruturada do HTML da RAG, incluíndo:
-     * - Lemma principal da palabra
-     * - Parte do discurso (substantivo, verbo, etc.)
-     * - Definicións numeradas con exemplos
-     * - Expresións e frases feitas
-     * - Sanitización de todos os datos extraídos
+     * Estrutura do HTML da RAG:
+     * Lemma > Subentry (unha por categoría gramatical) > Sense > Definition/Example
+     * Lemma > Fraseoloxia > Fraseoloxia__Texto + Subentry > Sense | References
+     * As entradas sen definición (remisións) teñen References no lugar de Sense.
      * 
      * @param string $html Contido HTML da definición
      * @param string $palabra Palabra orixinal
@@ -430,8 +417,7 @@ class ASG_DicionarioRAGConsulta {
         // Estrutura base dos datos a devolver
         $entrada = array(
             'palabra' => sanitize_text_field($palabra),
-            'parte_discurso' => '',
-            'definicions' => array(),
+            'subentradas' => array(),
             'expresions' => array()
         );
 
@@ -441,31 +427,17 @@ class ASG_DicionarioRAGConsulta {
             $entrada['palabra'] = sanitize_text_field(trim($lemmaNodes->item(0)->textContent));
         }
 
-        // Extraer parte do discurso
-        $posNodes = $xpath->query('//span[@class="Subentry__Part_of_speech"]');
-        if ($posNodes->length > 0) {
-            $entrada['parte_discurso'] = sanitize_text_field(trim($posNodes->item(0)->textContent));
-        }
-
-        // Extraer definicións principais
-        $senseNodes = $xpath->query('//span[@class="Sense"]');
-        
-        foreach ($senseNodes as $sense) {
-            $numero = $this->asg_extraerTexto($xpath, './/span[@class="Sense__SenseNumber"]', $sense);
-            $definicion = $this->asg_extraerTexto($xpath, './/span[@class="Definition__Definition"]', $sense);
+        // Subentradas principais (unha por categoría gramatical), fóra da fraseoloxía
+        $subentryNodes = $xpath->query('//span[@class="Subentry"][not(ancestor::span[@class="Fraseoloxia"])]');
+        foreach ($subentryNodes as $subentry) {
+            $subentrada = array(
+                'parte_discurso' => sanitize_text_field($this->asg_extraerTexto($xpath, './span[@class="Subentry__Part_of_speech"]', $subentry)),
+                'definicions' => $this->asg_extraerSentidos($xpath, $subentry),
+                'remisions' => $this->asg_extraerRemisions($xpath, $subentry)
+            );
             
-            if ($definicion) {
-                $ejemplos = array();
-                $ejemplosNodes = $xpath->query('.//span[@class="Example__Example"]', $sense);
-                foreach ($ejemplosNodes as $ejemplo) {
-                    $ejemplos[] = sanitize_text_field(trim($ejemplo->textContent));
-                }
-
-                $entrada['definicions'][] = array(
-                    'sentido' => sanitize_text_field(trim(str_replace('.', '', $numero))),
-                    'definicion' => sanitize_text_field(trim($definicion)),
-                    'ejemplos' => $ejemplos
-                );
+            if ($subentrada['definicions'] || $subentrada['remisions']) {
+                $entrada['subentradas'][] = $subentrada;
             }
         }
 
@@ -475,25 +447,15 @@ class ASG_DicionarioRAGConsulta {
         foreach ($fraseNodes as $frase) {
             $expresionTexto = $this->asg_extraerTexto($xpath, './/span[@class="Fraseoloxia__Texto"]', $frase);
             
-            if ($expresionTexto && !stripos($expresionTexto, 'Palabras relacionadas')) {
-                $expresionDefs = array();
+            if ($expresionTexto && stripos($expresionTexto, 'Palabras relacionadas') === false) {
+                $expresion = array(
+                    'expresion' => sanitize_text_field($expresionTexto),
+                    'definicions' => $this->asg_extraerSentidos($xpath, $frase),
+                    'remisions' => $this->asg_extraerRemisions($xpath, $frase)
+                );
                 
-                // Buscar definicións dentro da expresión
-                $senseFraseNodes = $xpath->query('.//span[@class="Sense"]', $frase);
-                foreach ($senseFraseNodes as $senseFrase) {
-                    $defTexto = $this->asg_extraerTexto($xpath, './/span[@class="Definition__Definition"]', $senseFrase);
-                    if ($defTexto) {
-                        $expresionDefs[] = array(
-                            'definicion' => sanitize_text_field(trim($defTexto))
-                        );
-                    }
-                }
-                
-                if (!empty($expresionDefs)) {
-                    $entrada['expresions'][] = array(
-                        'expresion' => sanitize_text_field(trim($expresionTexto)),
-                        'definicions' => $expresionDefs
-                    );
+                if ($expresion['definicions'] || $expresion['remisions']) {
+                    $entrada['expresions'][] = $expresion;
                 }
             }
         }
@@ -502,122 +464,146 @@ class ASG_DicionarioRAGConsulta {
     }
 
     /**
-     * Buscar conxugación completa dun verbo galego na RAG
+     * Extraer os sentidos (definición + exemplos) dun nodo
      * 
-     * Esta función realiza o proceso complexo de obter a conxugación
-     * verbal completa dun verbo galego, que inclúe:
-     * - Obtención do authToken necesario para autenticación
-     * - Construción da petición específica para conxugacións
-     * - Procesamento da resposta HTML coas táboas de conxugación
-     * - Manexo de casos especiais de verbos irregulares
+     * @param DOMXPath $xpath Obxecto XPath
+     * @param DOMNode $contexto Subentry ou Fraseoloxia
+     * @return array Lista de sentidos
+     */
+    private function asg_extraerSentidos($xpath, $contexto) {
+        $sentidos = array();
+        
+        foreach ($xpath->query('.//span[@class="Sense"]', $contexto) as $sense) {
+            $definicion = $this->asg_extraerTexto($xpath, './/span[@class="Definition__Definition"]', $sense);
+            if (!$definicion) {
+                continue;
+            }
+            
+            $ejemplos = array();
+            foreach ($xpath->query('.//span[@class="Example__Example"]', $sense) as $ejemplo) {
+                $ejemplos[] = sanitize_text_field(trim($ejemplo->textContent));
+            }
+            
+            $numero = $this->asg_extraerTexto($xpath, './/span[@class="Sense__SenseNumber"]', $sense);
+            $sentidos[] = array(
+                'sentido' => sanitize_text_field(str_replace('.', '', $numero)),
+                'definicion' => sanitize_text_field($definicion),
+                'ejemplos' => $ejemplos
+            );
+        }
+        
+        return $sentidos;
+    }
+
+    /**
+     * Extraer remisións a outras entradas ("VÉXASE carón, a")
+     * 
+     * Só se collen as que non están dentro dun sentido (os sinónimos
+     * dos sentidos non se mostran).
+     * 
+     * @param DOMXPath $xpath Obxecto XPath
+     * @param DOMNode $contexto Subentry ou Fraseoloxia
+     * @return array Lista de palabras ás que remite
+     */
+    private function asg_extraerRemisions($xpath, $contexto) {
+        $remisions = array();
+        $query = './/span[@class="References"][not(ancestor::span[@class="Sense"])]//span[@class="Reference"]';
+        
+        foreach ($xpath->query($query, $contexto) as $reference) {
+            $homonimo = $this->asg_extraerTexto($xpath, './/span[@class="Lemma__HomonymNumber"]', $reference);
+            $texto = trim($reference->textContent);
+            if ($homonimo !== '') {
+                $texto = trim(substr($texto, 0, -strlen($homonimo))) . ' (' . $homonimo . ')';
+            }
+            $remisions[] = sanitize_text_field($texto);
+        }
+        
+        return $remisions;
+    }
+
+    /**
+     * Buscar conxugación completa dun verbo galego na RAG
      * 
      * @param string $verbo O verbo en galego para conxugar
      * @return array|null Array con conxugación completa ou null se non se atopa
      * @throws Exception Se hai erros de comunicación ou autenticación
      */
     public function asg_buscarConxugacion($verbo) {
-        $verbo = sanitize_text_field($verbo);
+        $verbo = asg_dicionario_rag_minusculas(sanitize_text_field($verbo));
         
         // Log de debug se está activado
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log("ASG Dicionario: Buscando conxugación - " . $verbo);
         }
         
-        // Paso 1: Obter o authToken necesario
-        $authToken = $this->asg_obterAuthToken();
-        if (!$authToken) {
-            throw new Exception("Non se puido obter authToken");
+        // Se falla co token da caché (pode estar caducado), repítese cun novo
+        $resultado = $this->asg_pedirConxugacion($verbo, $this->asg_obterAuthToken());
+        if (!$resultado && $this->tokenDaCache) {
+            $resultado = $this->asg_pedirConxugacion($verbo, $this->asg_obterAuthToken(true));
         }
         
-        // Paso 2: Construír petición con authToken
-        $params = http_build_query(array(
-            'p_p_id' => 'com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet',
-            'p_p_lifecycle' => '2',
-            'p_p_state' => 'normal',
-            'p_p_mode' => 'view',
-            'p_p_cacheability' => 'cacheLevelPage',
-            '_com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet_cmd' => 'cmdConjugateVerb',
-            '_com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet_renderMode' => 'load',
-            '_com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet_nounTitle' => $verbo
-        ));
+        return $resultado;
+    }
 
-        $formData = http_build_query(array(
-            '_com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet_fieldSearchNoun' => $verbo,
-            '_com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet_verb' => '/pc/verbos/' . strtolower($verbo) . '.html',
-            'p_auth' => $authToken
-        ));
-
-        // Headers específicos para conxugacións
-        $headers = array(
-            'User-Agent: ' . ASG_DICIONARIO_RAG_USER_AGENT,
-            'Accept: application/json, text/javascript, */*',
-            'Accept-Language: es-ES,es;q=0.9,gl;q=0.8,en;q=0.7',
-            'Accept-Encoding: gzip, deflate, br, zstd',
-            'Content-Type: application/x-www-form-urlencoded; charset=UTF-8',
-            'Origin: https://academia.gal',
-            'Referer: https://academia.gal/dicionario/-/termo/' . $verbo,
-            'X-Requested-With: XMLHttpRequest',
-            'Sec-Fetch-Dest: empty',
-            'Sec-Fetch-Mode: cors', 
-            'Sec-Fetch-Site: same-origin',
-            'Cookie: COOKIE_SUPPORT=true; GUEST_LANGUAGE_ID=gl_ES'
+    /**
+     * Petición da conxugación dun verbo cun authToken concreto
+     * 
+     * @param string $verbo Verbo en minúsculas
+     * @param string $authToken Token de Liferay (p_auth)
+     * @return array|null Datos da conxugación ou null se non se atopa
+     * @throws Exception Se hai erros de comunicación coa RAG
+     */
+    private function asg_pedirConxugacion($verbo, $authToken) {
+        $response = $this->asg_peticion(
+            array(
+                'p_p_id' => 'com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet',
+                'p_p_lifecycle' => '2',
+                'p_p_state' => 'normal',
+                'p_p_mode' => 'view',
+                'p_p_cacheability' => 'cacheLevelPage',
+                '_com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet_cmd' => 'cmdConjugateVerb',
+                '_com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet_renderMode' => 'load',
+                '_com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet_nounTitle' => $verbo
+            ),
+            array(
+                '_com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet_fieldSearchNoun' => $verbo,
+                '_com_ideit_ragportal_liferay_dictionary_NormalSearchPortlet_verb' => '/pc/verbos/' . $verbo . '.html',
+                'p_auth' => $authToken
+            ),
+            array(
+                'Referer' => 'https://academia.gal/dicionario/-/termo/' . rawurlencode($verbo)
+            )
         );
 
-        // Executar petición cURL
-        $ch = curl_init();
-        curl_setopt_array($ch, array(
-            CURLOPT_URL => $this->baseUrl . '?' . $params,
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => $formData,
-            CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_TIMEOUT => $this->timeout
-        ));
-
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $error = curl_error($ch);
-        curl_close($ch);
-
-        // Manexo de erros
-        if ($error) {
-            throw new Exception("Erro cURL: " . $error);
-        }
-
-        if ($httpCode !== 200 || !$response) {
-            throw new Exception("Erro HTTP: " . $httpCode);
+        if (!$response) {
+            return null;
         }
 
         return $this->asg_parsearConxugacion($response, $verbo);
     }
 
     /**
-     * Obter authToken dinámico da páxina principal da RAG
+     * Obter o authToken de Liferay da páxina principal da RAG
      * 
-     * Esta función visita a páxina principal da RAG e extrae o authToken
-     * necesario para realizar consultas de conxugacións. O proceso inclúe:
-     * - Petición GET á páxina principal
-     * - Busca por patróns de authToken no HTML/JavaScript
-     * - Validación do token obtido
-     * - Manexo de casos onde non se atopa o token
+     * Gárdase na caché para non descargar a páxina principal en cada
+     * consulta. Se non se atopa, devólvese cadea baleira (hoxe a RAG
+     * non o valida).
      * 
-     * @return string|null O authToken ou null se non se pode obter
+     * @param bool $renovar Ignorar a caché e pedir un token novo
+     * @return string O authToken ou cadea baleira
      */
-    private function asg_obterAuthToken() {
-        $ch = curl_init();
-        curl_setopt_array($ch, array(
-            CURLOPT_URL => 'https://academia.gal/dicionario',
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_USERAGENT => ASG_DICIONARIO_RAG_USER_AGENT,
-            CURLOPT_TIMEOUT => $this->timeout
+    private function asg_obterAuthToken($renovar = false) {
+        $token = $renovar ? false : get_transient('asg_drag_auth_token');
+        $this->tokenDaCache = ($token !== false);
+        if ($token !== false) {
+            return $token;
+        }
+
+        $resposta = wp_remote_get('https://academia.gal/dicionario', array(
+            'timeout' => $this->timeout,
+            'user-agent' => ASG_DICIONARIO_RAG_USER_AGENT
         ));
-        
-        $response = curl_exec($ch);
-        curl_close($ch);
+        $html = is_wp_error($resposta) ? '' : wp_remote_retrieve_body($resposta);
         
         // Varios patróns para buscar o authToken no HTML/JS
         $patterns = array(
@@ -628,24 +614,26 @@ class ASG_DicionarioRAGConsulta {
             '/Liferay\.authToken\s*=\s*["\']([^"\']+)["\']/'
         );
         
+        $token = '';
         foreach ($patterns as $pattern) {
-            if (preg_match($pattern, $response, $matches)) {
-                return $matches[1];
+            if (preg_match($pattern, $html, $matches)) {
+                $token = $matches[1];
+                break;
             }
         }
         
-        return null;
+        if ($token !== '') {
+            set_transient('asg_drag_auth_token', $token, ASG_DICIONARIO_RAG_TOKEN_TTL);
+        }
+        
+        return $token;
     }
 	
-/**
+    /**
      * Parsear resposta da conxugación verbal da RAG
      * 
-     * Esta función procesa a resposta JSON que contén o HTML completo
-     * da conxugación verbal, extraendo:
-     * - Título da conxugación
-     * - HTML completo con todas as táboas de tempos verbais
-     * - Metadatos do verbo
-     * - Validación da estrutura recibida
+     * O HTML da RAG fíltrase con wp_kses para deixar só as etiquetas e
+     * clases necesarias para as táboas (sen scripts, eventos nin estilos).
      * 
      * @param string $data Resposta JSON da RAG
      * @param string $verbo Verbo orixinal consultado
@@ -654,11 +642,11 @@ class ASG_DicionarioRAGConsulta {
     private function asg_parsearConxugacion($data, $verbo) {
         $json = json_decode($data, true);
         
-        if (!$json || !isset($json['htmlContent'])) {
+        if (!$json || empty($json['htmlContent'])) {
             return null;
         }
         
-        $html = $json['htmlContent'];
+        $html = wp_kses($json['htmlContent'], self::asg_etiquetasConxugacion());
         
         // Usar DOMDocument para parsear metadatos
         $dom = new DOMDocument();
@@ -667,6 +655,11 @@ class ASG_DicionarioRAGConsulta {
         libxml_clear_errors();
         
         $xpath = new DOMXPath($dom);
+        
+        // Sen táboas non hai conxugación (verbo inexistente)
+        if ($xpath->query('//table')->length === 0) {
+            return null;
+        }
         
         $conxugacion = array(
             'verbo' => sanitize_text_field($verbo),
@@ -681,6 +674,30 @@ class ASG_DicionarioRAGConsulta {
         }
         
         return $conxugacion;
+    }
+
+    /**
+     * Etiquetas e atributos permitidos no HTML da conxugación
+     * 
+     * @return array Lista para wp_kses
+     */
+    private static function asg_etiquetasConxugacion() {
+        $attr = array('class' => true);
+        $celas = array('class' => true, 'colspan' => true, 'rowspan' => true);
+        return array(
+            'div' => $attr,
+            'p' => $attr,
+            'span' => $attr,
+            'b' => $attr,
+            'strong' => $attr,
+            'table' => $attr,
+            'caption' => $attr,
+            'thead' => $attr,
+            'tbody' => $attr,
+            'tr' => $attr,
+            'th' => $celas,
+            'td' => $celas
+        );
     }
 
     /**
@@ -711,4 +728,4 @@ class ASG_DicionarioRAGConsulta {
  * o que activa todos os hooks e funcionalidades. É o punto
  * de entrada principal do plugin cando WordPress o carga.
  */
-new ASG_DicionarioRAG();	
+new ASG_DicionarioRAG();	

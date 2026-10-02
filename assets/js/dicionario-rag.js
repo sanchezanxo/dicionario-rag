@@ -1,185 +1,183 @@
-jQuery(document).ready(function($) {
+jQuery(function($) {
     
-    // Manejar envío do formulario
-    $('#dicionario-form').on('submit', function(e) {
-        e.preventDefault();
+    // Cada shortcode da páxina funciona de forma independente
+    $('.dicionario-rag-container').each(function() {
+        const $container = $(this);
+        const $input = $container.find('.dicionario-rag-input');
+        const $botons = $container.find('button');
+        const $loading = $container.find('.dicionario-rag-loading');
+        const $resultado = $container.find('.dicionario-rag-resultado');
         
-        const palabra = $('#palabra-input').val().trim();
+        // Botón definición (envío do formulario, tamén con Enter)
+        $container.find('.dicionario-rag-form').on('submit', function(e) {
+            e.preventDefault();
+            asg_consultarRAG('definicion', 'Por favor, introduce unha palabra');
+        });
         
-        if (!palabra) {
-            alert('Por favor, introduce unha palabra');
-            return;
+        // Botón conxugación
+        $container.find('.dicionario-rag-conxugar').on('click', function(e) {
+            e.preventDefault();
+            asg_consultarRAG('conxugacion', 'Por favor, introduce un verbo');
+        });
+        
+        // Consultar o dicionario da RAG
+        function asg_consultarRAG(tipo, mensaxeBaleiro) {
+            const palabra = $input.val().trim();
+            
+            if (!palabra) {
+                asg_mostrarError(mensaxeBaleiro);
+                return;
+            }
+            
+            $loading.prop('hidden', false);
+            $resultado.html('');
+            $botons.prop('disabled', true);
+            
+            $.ajax({
+                url: dicionario_vars.ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'asg_consultar_rag',
+                    palabra: palabra,
+                    tipo: tipo
+                },
+                success: function(response) {
+                    if (response.success) {
+                        asg_mostrarResultado(response.data);
+                    } else {
+                        asg_mostrarError(response.data || 'Non se puido consultar o dicionario');
+                    }
+                },
+                error: function() {
+                    asg_mostrarError('Erro de conexión. Inténtao de novo.');
+                },
+                complete: function() {
+                    $loading.prop('hidden', true);
+                    $botons.prop('disabled', false);
+                }
+            });
         }
         
-        asg_consultarRAG(palabra);
-    });
-	
-	// Botón conxugación
-	$('#conxugar-btn').on('click', function(e) {
-		e.preventDefault();
-		
-		const palabra = $('#palabra-input').val().trim();
-		
-		if (!palabra) {
-			alert('Por favor, introduce un verbo');
-			return;
-		}
-		
-		asg_consultarRAG(palabra, 'conxugacion');
-	});	
-		
-    // Consultar o dicionario da RAG
-    function asg_consultarRAG(palabra, tipo = 'definicion') {
-        // Mostrar loading
-        $('#loading').show();
-        $('#resultado').html('');
-        $('#consultar-btn').prop('disabled', true).text('Consultando...');
-        
-        // Facer petición AJAX
-        $.ajax({
-            url: dicionario_vars.ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'asg_consultar_rag',
-                palabra: palabra,
-				tipo: tipo,
-                nonce: dicionario_vars.nonce
-            },
-            success: function(response) {
-                if (response.success) {
-                    asg_mostrarResultado(response.data);
-                } else {
-                    asg_mostrarError(response.data || 'Non se puido consultar o dicionario');
+        // Mostrar resultado das consultas
+        function asg_mostrarResultado(data) {
+            let html = '<div class="resultado-exitoso">';
+            
+            if (data.html_completo) {
+                // === FORMATO PARA CONXUGACIÓNS ===
+                html += '<h2 class="palabra-titulo">' + asg_escapeHtml(data.verbo) + '</h2>';
+                if (data.titulo) {
+                    html += '<h3>' + asg_escapeHtml(data.titulo) + '</h3>';
                 }
-            },
-            error: function(xhr, status, error) {
-                asg_mostrarError('Erro de conexión. Inténtao de novo.');
-            },
-            complete: function() {
-                // Ocultar loading
-                $('#loading').hide();
-                $('#consultar-btn').prop('disabled', false).text('Consultar');
+                
+                // O HTML xa vén filtrado (wp_kses) dende o servidor
+                html += '<div class="conxugacion-container">';
+                html += asg_limparConxugacion(data.html_completo);
+                html += '</div>';
+                
+                html += '<p class="fonte">';
+                html += 'Conxugación completa do verbo "' + asg_escapeHtml(data.verbo) + '" obtida da Real Academia Galega';
+                html += '</p>';
+                
+            } else {
+                // === FORMATO PARA DEFINICIÓNS ===
+                let entradas = Array.isArray(data) ? data : [data];
+                
+                entradas.forEach(function(entrada, index) {
+                    // Título da palabra
+                    if (entrada.palabra) {
+                        let palabra = asg_escapeHtml(entrada.palabra);
+                        
+                        // Se a palabra xa ten número ao final (vivir1), reformateala
+                        if (/\d+$/.test(palabra)) {
+                            palabra = palabra.replace(/(\d+)$/, ' ($1)');
+                        }
+                        
+                        html += '<h2 class="palabra-titulo">' + palabra + '</h2>';
+                    }
+                    // Unha subentrada por categoría gramatical
+                    (entrada.subentradas || []).forEach(function(sub) {
+                        if (sub.parte_discurso) {
+                            html += '<div class="parte-discurso">' + asg_escapeHtml(sub.parte_discurso) + '</div>';
+                        }
+                        
+                        sub.definicions.forEach(function(def) {
+                            html += '<div class="definicion">';
+                            
+                            if (def.sentido) {
+                                html += '<span class="sentido">' + asg_escapeHtml(def.sentido) + '. </span>';
+                            }
+                            
+                            html += '<div class="texto-definicion">' + asg_escapeHtml(def.definicion) + '</div>';
+                            
+                            // Exemplos
+                            if (def.ejemplos && def.ejemplos.length > 0) {
+                                html += '<div class="ejemplos">';
+                                html += '<strong>Exemplos:</strong>';
+                                def.ejemplos.forEach(function(ejemplo) {
+                                    html += '<div class="ejemplo">' + asg_escapeHtml(ejemplo) + '</div>';
+                                });
+                                html += '</div>';
+                            }
+                            
+                            html += '</div>';
+                        });
+                        
+                        html += asg_htmlRemisions(sub.remisions);
+                    });
+                    
+                    // Expresións
+                    if (entrada.expresions && entrada.expresions.length > 0) {
+                        html += '<div class="expresions">';
+                        html += '<h3>Expresións e frases</h3>';
+                        
+                        entrada.expresions.forEach(function(exp) {
+                            html += '<div class="expresion">';
+                            html += '<div class="expresion-titulo">' + asg_escapeHtml(exp.expresion) + '</div>';
+                            
+                            exp.definicions.forEach(function(def) {
+                                html += '<div class="texto-definicion">' + asg_escapeHtml(def.definicion) + '</div>';
+                            });
+                            html += asg_htmlRemisions(exp.remisions);
+                            
+                            html += '</div>';
+                        });
+                        
+                        html += '</div>';
+                    }
+                    
+                    // Separador entre entradas (se hai máis dunha)
+                    if (index < entradas.length - 1) {
+                        html += '<hr class="separador-entradas">';
+                    }
+                });
+                
+                // Se non hai definicións nin expresións en ningunha entrada
+                let hayContido = entradas.some(e => (e.subentradas && e.subentradas.length > 0) || (e.expresions && e.expresions.length > 0));
+                
+                if (!hayContido) {
+                    html += '<div class="sin-resultados">';
+                    html += 'Atopouse a palabra pero non se puideron extraer as definicións.';
+                    html += '</div>';
+                }
             }
-        });
-    }
+            
+            html += '</div>';
+            
+            $resultado.html(html);
+        }
+        
+        // Remisións a outras entradas ("Véxase: carón, a")
+        function asg_htmlRemisions(remisions) {
+            if (!remisions || remisions.length === 0) return '';
+            return '<div class="remision">Véxase: ' + remisions.map(asg_escapeHtml).join(', ') + '</div>';
+        }
+        
+        // Mostrar mensaxe de erro
+        function asg_mostrarError(mensaxe) {
+            $resultado.html('<div class="error">' + asg_escapeHtml(mensaxe) + '</div>');
+        }
+    });
     
-    // Mostrar resultado das consultas
-    function asg_mostrarResultado(data) {
-        let html = '<div class="resultado-exitoso">';
-        
-        // DETECTAR SE É CONXUGACIÓN
-        if (data.html_completo && data.titulo) {
-            // === FORMATO PARA CONXUGACIÓNS ===
-            html += '<div class="palabra-titulo">' + asg_escapeHtml(data.verbo) + '</div>';
-            html += '<h4>🔄 ' + asg_escapeHtml(data.titulo) + '</h4>';
-            
-            // Limpar e mellorar o HTML da conxugación
-            let htmlLimpo = asg_limparConxugacion(data.html_completo);
-            
-            // Container da conxugación
-            html += '<div class="conxugacion-container">';
-            html += htmlLimpo;
-            html += '</div>';
-            
-            html += '<div class="fonte">';
-            html += '💡 Conxugación completa do verbo "' + asg_escapeHtml(data.verbo) + '" obtida da Real Academia Galega';
-            html += '</div>';
-            
-		} else {
-			// === FORMATO PARA DEFINICIÓNS ===
-			
-			// Agora data é unha array de entradas
-			let entradas = Array.isArray(data) ? data : [data];
-			
-			entradas.forEach(function(entrada, index) {
-				// Título da palabra
-				if (entrada.palabra) {
-					let palabra = asg_escapeHtml(entrada.palabra);
-					
-					// Se a palabra xa ten número ao final (vivir1), reformateala
-					if (/\d+$/.test(palabra)) {
-						palabra = palabra.replace(/(\d+)$/, ' ($1)');
-					}
-					
-					html += '<div class="palabra-titulo">' + palabra + '</div>';
-				}
-				// Parte do discurso
-				if (entrada.parte_discurso) {
-					html += '<div class="parte-discurso">' + asg_escapeHtml(entrada.parte_discurso) + '</div>';
-				}
-				
-				// Definicións principais
-				if (entrada.definicions && entrada.definicions.length > 0) {
-					html += '<h4>📖 Definicións:</h4>';
-					
-					entrada.definicions.forEach(function(def, index) {
-						html += '<div class="definicion">';
-						
-						if (def.sentido) {
-							html += '<span class="sentido">' + asg_escapeHtml(def.sentido) + '. </span>';
-						}
-						
-						html += '<div class="texto-definicion">' + asg_escapeHtml(def.definicion) + '</div>';
-						
-						// Exemplos
-						if (def.ejemplos && def.ejemplos.length > 0) {
-							html += '<div class="ejemplos">';
-							html += '<strong>Exemplos:</strong>';
-							def.ejemplos.forEach(function(ejemplo) {
-								html += '<div class="ejemplo">• ' + asg_escapeHtml(ejemplo) + '</div>';
-							});
-							html += '</div>';
-						}
-						
-						html += '</div>';
-					});
-				}
-				
-				// Expresións
-				if (entrada.expresions && entrada.expresions.length > 0) {
-					html += '<div class="expresions">';
-					html += '<h4>💬 Expresións e frases:</h4>';
-					
-					entrada.expresions.forEach(function(exp) {
-						html += '<div class="expresion">';
-						html += '<div class="expresion-titulo">' + asg_escapeHtml(exp.expresion) + '</div>';
-						
-						if (exp.definicions) {
-							exp.definicions.forEach(function(def) {
-								html += '<div class="texto-definicion">• ' + asg_escapeHtml(def.definicion) + '</div>';
-							});
-						}
-						
-						html += '</div>';
-					});
-					
-					html += '</div>';
-				}
-				
-				// Separador entre entradas (se hai máis dunha)
-				if (index < entradas.length - 1) {
-					html += '<hr style="margin: 30px 0; border: 1px solid #eee;">';
-				}
-			});
-			
-			// Se non hai definicións nin expresións en ningunha entrada
-			let hayDefiniciones = entradas.some(e => e.definicions && e.definicions.length > 0);
-			let hayExpresiones = entradas.some(e => e.expresions && e.expresions.length > 0);
-			
-			if (!hayDefiniciones && !hayExpresiones) {
-				html += '<div class="sin-resultados">';
-				html += '🤔 Atopouse a palabra pero non se puideron extraer as definicións.';
-				html += '</div>';
-			}
-		}
-			
-		
-        
-        html += '</div>';
-        
-        $('#resultado').html(html);
-    }
-
     // Función para escapar HTML e evitar XSS
     function asg_escapeHtml(text) {
         if (!text) return '';
@@ -190,24 +188,8 @@ jQuery(document).ready(function($) {
             '"': '&quot;',
             "'": '&#039;'
         };
-        return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
     }
-    
-    // Mostrar mensaxe de erro
-    function asg_mostrarError(mensaje) {
-        const html = '<div class="error">❌ ' + asg_escapeHtml(mensaje) + '</div>';
-        $('#resultado').html(html);
-    }
-    
-    // Permitir buscar premendo Enter
-    $('#palabra-input').on('keypress', function(e) {
-        if (e.which === 13) {
-            $('#dicionario-form').submit();
-        }
-    });
-    
-    // Auto-focus no input
-    $('#palabra-input').focus();
     
 });
 
@@ -242,26 +224,31 @@ function asg_limparConxugacion(htmlCompleto) {
     let pronomes = ['eu', 'ti', 'el/ela', 'nós', 'vós', 'eles/elas'];
     let pronomesImperativo = ['—', 'ti', '—', '—', 'vós', '—'];
     
-    let celasBaleiras = tempDiv.querySelectorAll('td.anchouno, td.anchocuatro');
-    let contadorPronomes = 0;
+    let etiquetasParticipio = ['masc. sing.', 'fem. sing.', 'masc. pl.', 'fem. pl.'];
     
-    celasBaleiras.forEach(function(cela) {
-        if (cela.textContent.trim() === '') {
-            // Verificar se estamos nun imperativo
-            let tabla = cela.closest('table');
-            let caption = tabla ? tabla.querySelector('caption') : null;
-            let isImperativo = caption && caption.textContent.includes('Imperativo');
-            
-            // Escoller array de pronomes
-            let arrayPronomes = isImperativo ? pronomesImperativo : pronomes;
-            let indice = contadorPronomes % arrayPronomes.length;
-            
-            // Engadir pronome e CLASE CSS no lugar de estilos inline
-            cela.textContent = arrayPronomes[indice];
-            cela.classList.add('js-pronome-engadido');
-            
-            contadorPronomes++;
+    // O contador reiníciase en cada táboa; o xerundio non leva pronomes
+    tempDiv.querySelectorAll('table').forEach(function(tabla) {
+        let caption = tabla.querySelector('caption');
+        let textoCaption = caption ? caption.textContent : '';
+        
+        let arrayPronomes = pronomes;
+        if (textoCaption.includes('Imperativo')) {
+            arrayPronomes = pronomesImperativo;
+        } else if (textoCaption.includes('Participio')) {
+            arrayPronomes = etiquetasParticipio;
+        } else if (textoCaption.includes('Xerundio')) {
+            return;
         }
+        
+        let contadorPronomes = 0;
+        tabla.querySelectorAll('td.anchouno, td.anchocuatro').forEach(function(cela) {
+            if (cela.textContent.trim() === '') {
+                // Engadir pronome e CLASE CSS no lugar de estilos inline
+                cela.textContent = arrayPronomes[contadorPronomes % arrayPronomes.length];
+                cela.classList.add('js-pronome-engadido');
+                contadorPronomes++;
+            }
+        });
     });
     
     // Dividir táboas do indicativo e subxuntivo + mellorar outras
@@ -479,4 +466,4 @@ function asg_dividirTaboaSubxuntivo(tablaSubxuntivo) {
     
     // Substituír a táboa orixinal co novo container
     tablaSubxuntivo.parentNode.replaceChild(containerDiv, tablaSubxuntivo);
-}
+}

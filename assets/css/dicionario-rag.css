@@ -1,739 +1,367 @@
 /* =================================================================
-   DICIONARIO RAG TESTER - ESTILOS OPTIMIZADOS
+   DICIONARIO RAG
+   Os estilos herdan do tema: tipografía, cor do texto, botóns
+   (wp-element-button) e títulos. As cores secundarias derívanse
+   de currentColor, polo que funcionan en temas claros e escuros.
+
+   Para personalizar dende o tema, sobrescribe estas variables:
+   .dicionario-rag-container { --dicionario-rag-accent: var(--wp--preset--color--accent-1); }
    ================================================================= */
-   
-/* Importar Open Sans desde Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&display=swap');
 
 .dicionario-rag-container {
-    max-width: 1000px;
-    margin: 0 auto;
-    padding: 0;
-    border: none;
-    background: transparent;
-    font-family: 'Montserrat', 'Roboto', sans-serif;
+    --dicionario-rag-accent: currentColor;
+    --dicionario-rag-border: color-mix(in srgb, currentColor 20%, transparent);
+    --dicionario-rag-surface: color-mix(in srgb, currentColor 5%, transparent);
+    --dicionario-rag-muted: color-mix(in srgb, currentColor 70%, transparent);
+    --dicionario-rag-error: var(--wp--preset--color--vivid-red, #cf2e2e);
+    --dicionario-rag-radius: 0.25rem;
+    --dicionario-rag-gap: var(--wp--preset--spacing--30, 1rem);
+    --dicionario-rag-small: var(--wp--preset--font-size--small, 0.875em);
 }
 
 /* ---------- FORMULARIO ---------- */
-.form-group {
-    margin-bottom: 24px;
+.dicionario-rag-container .dicionario-rag-form label {
+    display: block;
+    margin-bottom: 0.5em;
+}
+
+.dicionario-rag-container .dicionario-rag-campos {
     display: flex;
     flex-wrap: wrap;
-    gap: 12px;
-    align-items: end;
+    gap: calc(var(--dicionario-rag-gap) * 0.75);
+    align-items: stretch;
 }
 
-.form-group label {
-    font-family: 'Open Sans', sans-serif;
-    width: 100%;
-    margin-bottom: 12px;
-    font-weight: 400;
-    font-size: 16px;
-    color: #555;
-    line-height: 1.4;
-}
-
-.form-group input[type="text"] {
+.dicionario-rag-container .dicionario-rag-input {
+    box-sizing: border-box;
     flex: 2;
     min-width: 200px;
-    padding: 12px 14px;
-    border: 1.5px solid #ddd;
-    border-radius: 6px;
-    font-size: 15px;
-    line-height: 1.4;
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    padding: 0.6em 0.8em;
+    font: inherit;
+    color: inherit;
+    background: transparent;
+    border: 1px solid var(--dicionario-rag-border);
+    border-radius: var(--dicionario-rag-radius);
 }
 
-.form-group input[type="text"]:focus {
-    outline: none;
-    border-color: #636B46;
+.dicionario-rag-container .dicionario-rag-input:focus {
+    outline: 2px solid var(--dicionario-rag-accent);
+    outline-offset: 1px;
 }
 
-/* Estilos comúns para ambos botóns */
-#consultar-btn,
-#conxugar-btn {
+.dicionario-rag-container .dicionario-rag-campos button {
     flex: 1;
     min-width: 100px;
-    padding: 12px 16px;
-    border: 2px solid #636B46;
-    border-radius: 6px;
     cursor: pointer;
-    font-size: 15px;
-    font-weight: 500;
-    transition: all 0.3s ease;
 }
 
-/* Botón principal (Definición) - fondo sólido */
-#consultar-btn {
-    background: #636B46;
-    color: white;
-}
-
-#consultar-btn:hover {
-    background: #52582e;
-    border-color: #52582e;
-}
-
-/* Botón secundario (Conxugación) - só borde */
-#conxugar-btn {
+/* Botón secundario (Conxugación): variante contorno do botón do tema */
+.dicionario-rag-container .dicionario-rag-conxugar.wp-element-button {
     background: transparent;
-    color: #636B46;
+    color: inherit;
+    box-shadow: inset 0 0 0 1px currentColor;
 }
 
-#conxugar-btn:hover {
-    background: rgba(99, 107, 70, 0.08);
-}
-
-/* Estados disabled para ambos botóns */
-#consultar-btn:disabled,
-#conxugar-btn:disabled {
+.dicionario-rag-container .dicionario-rag-campos button:disabled {
     opacity: 0.6;
     cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-}
-
-#conxugar-btn {	
-	outline-style: none;
 }
 
 /* ---------- LOADING ---------- */
-#loading {
+.dicionario-rag-container .dicionario-rag-loading {
     text-align: center;
     font-style: italic;
-    color: #666;
-    padding: 20px;
+    color: var(--dicionario-rag-muted);
+}
+
+.dicionario-rag-container .dicionario-rag-loading[hidden] {
+    display: none;
 }
 
 /* ---------- RESULTADO ---------- */
-#resultado {
-    margin-top: 24px;
-    padding: 20px;
-    background: white;
-    border-radius: 6px;
-    border: 1px solid #e0e0e0;
-    min-height: 50px;
-}
-
-.resultado-exitoso {
-    animation: fadeIn 0.5s ease-in;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+.dicionario-rag-container .dicionario-rag-resultado:not(:empty) {
+    margin-top: var(--dicionario-rag-gap);
 }
 
 /* ---------- PALABRA E METADATOS ---------- */
-.palabra-titulo {
-    font-size: 24px;
-    font-weight: bold;
-    color: #636B46;
-    margin-bottom: 8px;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 8px;
+.dicionario-rag-container .palabra-titulo {
+    margin: 0 0 0.25em;
+    padding-bottom: 0.25em;
+    border-bottom: 1px solid var(--dicionario-rag-border);
 }
 
-.parte-discurso {
+.dicionario-rag-container .parte-discurso {
+    display: block;
+    margin: 1em 0 0.5em;
     font-style: italic;
-    color: #666;
-    margin-bottom: 20px;
-    font-size: 14px;
-    background: #f0f0f0;
-    padding: 4px 8px;
-    border-radius: 6px;
-    display: inline-block;
+    font-size: var(--dicionario-rag-small);
+    color: var(--dicionario-rag-muted);
+}
+
+.dicionario-rag-container .resultado-exitoso h3 {
+    margin: 1.25em 0 0.75em;
 }
 
 /* ---------- DEFINICIÓNS ---------- */
-#resultado h4 {
-    color: #636B46;
-    margin: 20px 0 15px 0;
-    font-size: 16px;
-    border-left: 4px solid #636B46;
-    padding-left: 10px;
+.dicionario-rag-container .definicion {
+    margin-bottom: 0.75em;
+    padding: 0.75em 1em;
+    background: var(--dicionario-rag-surface);
+    border-left: 3px solid var(--dicionario-rag-accent);
+    border-radius: 0 var(--dicionario-rag-radius) var(--dicionario-rag-radius) 0;
 }
 
-.definicion {
-    margin-bottom: 15px;
-    padding: 12px;
-    background: #fafafa;
-    border-left: 3px solid #636B46;
-    border-radius: 0px 6px 6px 0;
-    transition: box-shadow 0.3s ease;
-}
-
-.definicion:hover {
-    box-shadow: 0 2px 10px rgba(0,0,0,0.075);
-}
-
-.sentido {
+.dicionario-rag-container .sentido {
     font-weight: bold;
-    color: #636B46;
-    font-size: 16px;
+    color: var(--dicionario-rag-accent);
 }
 
-.texto-definicion {
-    margin: 8px 0;
-    line-height: 1.5;
-    color: #333;
-    font-family: 'Open Sans', sans-serif;
-    font-size: 16px; /* Reducido de 22px */
-    font-weight: 400;
+.dicionario-rag-container .texto-definicion {
+    margin: 0.25em 0;
 }
 
 /* ---------- EXEMPLOS ---------- */
-.ejemplos {
-    margin-top: 12px;
-    padding-top: 8px;
-    border-top: 1px solid #e0e0e0;
-    font-family: 'Open Sans', sans-serif;
+.dicionario-rag-container .ejemplos {
+    margin-top: 0.5em;
+    padding-top: 0.5em;
+    border-top: 1px solid var(--dicionario-rag-border);
+    font-size: var(--dicionario-rag-small);
 }
 
-.ejemplos strong {
-    color: #555;
-    font-size: 12px; /* Reducido considerablemente */
-    font-weight: 600;
-}
-
-.ejemplo {
-    font-style: italic;
-    color: #666;
-    margin-left: 15px;
-    margin-top: 4px;
-    line-height: 1.4;
+.dicionario-rag-container .ejemplo {
     position: relative;
-    font-size: 13px; /* Reducido considerablemente */
-    font-weight: 400;
+    margin: 0.25em 0 0 1.25em;
+    font-style: italic;
+    color: var(--dicionario-rag-muted);
 }
 
-.ejemplo::before {
+.dicionario-rag-container .ejemplo::before {
     content: "→";
     position: absolute;
-    left: -15px;
-    color: #636B46;
-    font-weight: bold;
+    left: -1.25em;
+    font-style: normal;
+}
+
+/* ---------- REMISIÓNS ("Véxase") ---------- */
+.dicionario-rag-container .remision {
+    margin: 0.25em 0 0.75em;
+    font-style: italic;
+}
+
+.dicionario-rag-container .expresion .remision {
+    margin-bottom: 0;
 }
 
 /* ---------- EXPRESIÓNS ---------- */
-.expresions {
-    margin-top: 25px;
-    padding-top: 20px;
-    border-top: 2px solid #e8f4f8;
+.dicionario-rag-container .expresions {
+    margin-top: 1.5em;
 }
 
-.expresion {
-    margin-bottom: 12px;
-    padding: 10px;
-    background: #e8f4f8;
-    border-radius: 6px;
-    border: 1px solid #d1ecf1;
+.dicionario-rag-container .expresion {
+    margin-bottom: 0.75em;
+    padding: 0.75em 1em;
+    border: 1px solid var(--dicionario-rag-border);
+    border-radius: var(--dicionario-rag-radius);
 }
 
-.expresion-titulo {
+.dicionario-rag-container .expresion-titulo {
     font-weight: bold;
-    color: #2c5aa0;
-    margin-bottom: 6px;
-    font-size: 15px;
+    margin-bottom: 0.25em;
 }
 
-.expresion .texto-definicion {
-    margin: 4px 0;
-    padding-left: 8px;
-    font-size: 14px;
+.dicionario-rag-container .separador-entradas {
+    margin: 2em 0;
 }
 
-/* ---------- ESTADOS DE ERRO E SIN RESULTADOS ---------- */
-.error {
-	font-size: 18px;
-    color: #d32f2f;
-    background: #ffebee;
-    padding: 15px;
-    border-radius: 6px;
-    border: 1px solid #ffcdd2;
-    border-left: 4px solid #d32f2f;
-    animation: shake 0.5s ease-in-out;
+/* ---------- ESTADOS DE ERRO E SEN RESULTADOS ---------- */
+.dicionario-rag-container .error {
+    padding: 0.75em 1em;
+    border: 1px solid var(--dicionario-rag-error);
+    border-left-width: 4px;
+    border-radius: var(--dicionario-rag-radius);
+    color: var(--dicionario-rag-error);
 }
 
-@keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-5px); }
-    75% { transform: translateX(5px); }
-}
-
-.sin-resultados {
-    color: #666;
-    font-style: italic;
+.dicionario-rag-container .sin-resultados {
+    padding: 1em;
     text-align: center;
-    padding: 20px;
-    background: #f5f5f5;
-    border-radius: 6px;
-    border: 1px dashed #ccc;
+    font-style: italic;
+    color: var(--dicionario-rag-muted);
+    border: 1px dashed var(--dicionario-rag-border);
+    border-radius: var(--dicionario-rag-radius);
 }
 
-/* ================================================================= 
-   CSS ESPECÍFICO PARA CONXUGACIÓNS
+/* =================================================================
+   CONXUGACIÓNS
    ================================================================= */
 
-.conxugacion-container {
-    max-height: none !important;
-    overflow: visible !important;
-	margin:24px 0px;
-    background: #fff;
-    width: 100% !important;
+.dicionario-rag-container .conxugacion-container {
+    margin: var(--dicionario-rag-gap) 0;
+    font-size: var(--dicionario-rag-small);
 }
 
 /* Ocultar elementos innecesarios do popup orixinal */
-.conxugacion-container .fondoscuro,
-.conxugacion-container .cabec,
-.conxugacion-container .close,
-.conxugacion-container .pe_emer {
-    display: none !important;
+.dicionario-rag-container .conxugacion-container .fondoscuro,
+.dicionario-rag-container .conxugacion-container .cabec,
+.dicionario-rag-container .conxugacion-container .close,
+.dicionario-rag-container .conxugacion-container .pe_emer,
+.dicionario-rag-container .conxugacion-container .clear,
+.dicionario-rag-container .conxugacion-container .sepaconxug {
+    display: none;
 }
 
 /* Container principal das táboas */
-.conxugacion-container .zonscroll {
+.dicionario-rag-container .zonscroll {
     display: flex;
     flex-wrap: wrap;
-    gap: 20px;
-    width: 100%;
+    gap: var(--dicionario-rag-gap);
 }
 
-/* Columnas das táboas - AGRANDADAS PARA EVITAR CELAS PEQUENAS */
-.conxugacion-container .colesquerda {
+.dicionario-rag-container .colesquerda {
     flex: 2;
-    min-width: 400px; /* Aumentado de 350px */
+    min-width: 400px;
 }
 
-.conxugacion-container .colcentro {
+.dicionario-rag-container .colcentro,
+.dicionario-rag-container .coldereita {
     flex: 1;
-    min-width: 300px; /* Aumentado de 250px */
+    min-width: 300px;
 }
 
-.conxugacion-container .coldereita {
-    flex: 1;
-    min-width: 300px; /* Aumentado de 250px */
-}
-
-/* ========== ESTILOS XERAIS DAS TÁBOAS - OPTIMIZADO ========== */
-
-/* BASE: Todos os estilos comúns das táboas */
-.conxugacion-container table {
+/* Táboas */
+.dicionario-rag-container .conxugacion-container table {
     width: 100%;
+    margin: 0 0 var(--dicionario-rag-gap);
     border-collapse: collapse;
-    margin-bottom: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    border-radius: 6px;
-    overflow: hidden;
-    table-layout: fixed; /* Evita celas moi pequenas */
+    table-layout: fixed;
 }
 
-/* BASE: Todos os captions */
-.conxugacion-container caption {
-    background: #636B46;
-    color: white;
-    padding: 12px;
+.dicionario-rag-container .conxugacion-container caption {
+    padding: 0.5em;
     font-weight: bold;
-    font-size: 14px;
     text-align: center;
-    margin: 0;
-    border-radius: 6px 6px 0 0;
+    background: var(--dicionario-rag-surface);
+    border: 1px solid var(--dicionario-rag-border);
+    border-bottom: none;
 }
 
-/* BASE: Todos os headers */
-.conxugacion-container th {
-    background: #f8f9fa;
-    color: #636B46;
-    font-weight: bold;
-    padding: 12px 8px;
+.dicionario-rag-container .conxugacion-container th,
+.dicionario-rag-container .conxugacion-container td {
+    padding: 0.4em 0.6em;
     text-align: center;
-    border: 1px solid #dee2e6;
-    font-size: 14px;
-    min-width: 120px;
-    word-wrap: break-word;
-}
-
-/* BASE: Todas as celas */
-.conxugacion-container td {
-    padding: 10px 12px;
-    text-align: center;
-    border: 1px solid #dee2e6;
-    font-size: 14px;
-    line-height: 1.4;
-    min-width: 120px;
-    word-wrap: break-word;
     vertical-align: middle;
+    border: 1px solid var(--dicionario-rag-border);
+    overflow-wrap: break-word;
 }
 
-/* BASE: Cores alternadas das filas */
-.conxugacion-container tr:nth-child(even) td {
-    background: #f8f9fa;
-}
-
-.conxugacion-container tr:nth-child(odd) td {
-    background: white;
-}
-
-/* ESPECÍFICO: Pronomes engadidos dinamicamente */
-.js-pronome-engadido {
+.dicionario-rag-container .conxugacion-container th {
     font-weight: bold;
-    color: #636B46;
-    font-size: 12px;
-    background: #f0f4f0;
-    font-style: italic;
 }
 
-/* ========== ESTILOS PARA INDICATIVO E SUBXUNTIVO RESPONSIVE ========== */
-.indicativo-responsive-container,
-.subxuntivo-responsive-container {
+/* Pronomes engadidos dinamicamente */
+.dicionario-rag-container .js-pronome-engadido {
+    font-style: italic;
+    color: var(--dicionario-rag-muted);
+}
+
+/* Indicativo e subxuntivo: unha táboa por tempo */
+.dicionario-rag-container .indicativo-responsive-container,
+.dicionario-rag-container .subxuntivo-responsive-container {
     display: flex;
     flex-wrap: wrap;
-    gap: 15px;
-    margin-bottom: 20px;
+    gap: calc(var(--dicionario-rag-gap) * 0.75);
+    margin-bottom: var(--dicionario-rag-gap);
 }
 
-.tempo-individual {
+.dicionario-rag-container .conxugacion-container .tempo-individual {
     flex: 1;
     min-width: 250px;
     max-width: 350px;
-    margin-bottom: 15px;
+    margin-bottom: 0;
 }
 
-.tempo-individual td {
-    padding: 8px 12px;
-    font-size: 14px;
-    min-width: 100px;
-}
-
-/* ========== ESTRUTURA ORGANIZADA DE CONXUGACIÓNS ========== */
-.conxugacion-organizada {
-    display: flex;
-    flex-direction: column;
-    gap: 30px;
-}
-
-.seccion-modo {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-
-.titulo-modo {
-    font-size: 20px;
-    font-weight: bold;
-    color: #636B46;
-    margin: 0;
-    padding: 10px 0;
-    border-bottom: 2px solid #636B46;
-    text-align: center;
-}
-
-/* Container para outras formas */
-.outras-formas-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
-    justify-content: center;
-}
-
-.outras-formas-container table {
-    flex: 1;
-    min-width: 200px;
-    max-width: 300px;
-}
-
-/* Grid para o container das outras formas */
-.outras-formas-grid {
+/* Outras formas (imperativo, infinitivo, xerundio, participio) */
+.dicionario-rag-container .outras-formas-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: auto auto;
-    gap: 20px;
+    gap: var(--dicionario-rag-gap);
     align-items: start;
-    width: 100%;
 }
 
-/* Posicionamento específico de cada táboa */
-.outras-formas-grid .tabimperativo {
-    grid-column: 1 / 2;
-    grid-row: 1;
-}
+.dicionario-rag-container .outras-formas-grid .tabimperativo  { grid-column: 1 / 2; grid-row: 1; }
+.dicionario-rag-container .outras-formas-grid .tabinfinitivo  { grid-column: 1 / 2; grid-row: 2; }
+.dicionario-rag-container .outras-formas-grid .tabxerundio    { grid-column: 2 / 3; grid-row: 2; }
+.dicionario-rag-container .outras-formas-grid .tabparticipio  { grid-column: 3 / 4; grid-row: 2; }
 
-.outras-formas-grid .tabinfinitivo {
-    grid-column: 1 / 2;
-    grid-row: 2;
-}
-
-.outras-formas-grid .tabxerundio {
-    grid-column: 2 / 3;
-    grid-row: 2;
-}
-
-.outras-formas-grid .tabparticipio {
-    grid-column: 3 / 4;
-    grid-row: 2;
-}
-
-/* Ocultar div.clear que rompe o layout */
-.outras-formas-grid .clear {
-    display: none;
-}
-
-/* Estilos para as táboas das outras formas */
-.tabla-outras-formas,
-.tabla-forma-simple {
-    width: 100%;
+.dicionario-rag-container .conxugacion-container .tabla-outras-formas {
     margin: 0;
-    border-radius: 6px;
-    overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
-/* Celas das outras formas */  
-.tabla-outras-formas td:not(.sepaconxug),
-.tabla-forma-simple td {
-    padding: 10px 12px;
+/* ---------- CRÉDITOS ---------- */
+.dicionario-rag-container .fonte {
+    font-size: var(--dicionario-rag-small);
+    font-style: italic;
     text-align: center;
-    border: 1px solid #dee2e6;
-    font-size: 14px;
-}
-
-/* Ocultar separadores */
-.tabla-outras-formas .sepaconxug {
-    display: none;
-}
-
-/* Cores alternadas */
-.tabla-outras-formas tr:nth-child(even) td:not(.sepaconxug),
-.tabla-forma-simple tr:nth-child(even) td {
-    background: #f8f9fa;
-}
-
-.tabla-outras-formas tr:nth-child(odd) td:not(.sepaconxug),
-.tabla-forma-simple tr:nth-child(odd) td {
-    background: white;
-}
-
-/* Limpiar floats */
-.conxugacion-container .clear {
-    clear: both;
-    display: block;
-    height: 0;
-    visibility: hidden;
-}
-
-/* =========== CRÉDITOS =========== */
-.fonte	{
-	font-size:14px;
-	color:#666666;
-	font-style:italic;
-	text-align:center;
+    color: var(--dicionario-rag-muted);
 }
 
 /* ========== RESPONSIVE ========== */
 @media (max-width: 1024px) {
-    .conxugacion-container .zonscroll {
+    .dicionario-rag-container .zonscroll {
         flex-direction: column;
     }
-    
-    .conxugacion-container .colesquerda,
-    .conxugacion-container .colcentro,
-    .conxugacion-container .coldereita {
+
+    .dicionario-rag-container .colesquerda,
+    .dicionario-rag-container .colcentro,
+    .dicionario-rag-container .coldereita {
         flex: none;
         min-width: auto;
         width: 100%;
     }
-    
-    /* Indicativo e subxuntivo responsive - 2 columnas */
-    .indicativo-responsive-container,
-    .subxuntivo-responsive-container {
-        justify-content: space-between;
+
+    .dicionario-rag-container .conxugacion-container .tempo-individual {
+        flex: 0 0 calc(50% - var(--dicionario-rag-gap) * 0.375);
+        max-width: calc(50% - var(--dicionario-rag-gap) * 0.375);
     }
-    
-    .tempo-individual {
-        flex: 0 0 48%;
-        max-width: 48%;
-    }
-    
-    /* Outras formas en 2 columnas */
-    .outras-formas-container {
-        justify-content: space-between;
-    }
-    
-    .outras-formas-container table {
-        flex: 0 0 48%;
-        max-width: 48%;
-    }
-    
-    .outras-formas-grid {
+
+    .dicionario-rag-container .outras-formas-grid {
         grid-template-columns: repeat(2, 1fr);
-        grid-template-rows: auto auto auto;
     }
-    
-    .outras-formas-grid .tabimperativo {
-        grid-column: 1 / 3;
-        grid-row: 1;
-    }
-    
-    .outras-formas-grid .tabinfinitivo {
-        grid-column: 1 / 2;
-        grid-row: 2;
-    }
-    
-    .outras-formas-grid .tabxerundio {
-        grid-column: 2 / 3;
-        grid-row: 2;
-    }
-    
-    .outras-formas-grid .tabparticipio {
-        grid-column: 1 / 3;
-        grid-row: 3;
-    }
+
+    .dicionario-rag-container .outras-formas-grid .tabimperativo { grid-column: 1 / 3; grid-row: 1; }
+    .dicionario-rag-container .outras-formas-grid .tabinfinitivo { grid-column: 1 / 2; grid-row: 2; }
+    .dicionario-rag-container .outras-formas-grid .tabxerundio   { grid-column: 2 / 3; grid-row: 2; }
+    .dicionario-rag-container .outras-formas-grid .tabparticipio { grid-column: 1 / 3; grid-row: 3; }
 }
 
 @media (max-width: 768px) {
-    /* Formulario */
-    .form-group {
-        flex-direction: column;
-        gap: 16px;
-        align-items: stretch;
-    }
-    
-    .form-group input {
-        flex: none;
-        width: 100%;
-        min-width: auto;
-    }
-    
-    #consultar-btn,
-    #conxugar-btn {
-        flex: none;
-        width: 100%;
-        min-width: auto;
-        font-size: 14px;
-        padding: 11px 14px;
-    }
-    
-    .form-group label {
-        font-size: 13px;
-        margin-bottom: 8px;
-    }
-    
-    /* Resultados */
-    .palabra-titulo {
-        font-size: 20px;
-    }
-    
-    .definicion {
-        padding: 10px;
-    }
-    
-    /* Conxugacións */
-    .conxugacion-container {
-        padding: 15px;
-    }
-    
-    .conxugacion-container table {
-        font-size: 12px;
-    }
-    
-    /* Conxugacións - responsive */
-    .conxugacion-container th,
-    .conxugacion-container td {
-        padding: 6px 4px;
-        min-width: 80px; /* Reducido para móbil */
-    }
-    
-    .conxugacion-container caption {
-        font-size: 13px;
-        padding: 8px;
-    }
-    
-    /* Indicativo e subxuntivo responsive - 1 columna en móbil */
-    .indicativo-responsive-container,
-    .subxuntivo-responsive-container {
+    .dicionario-rag-container .dicionario-rag-campos {
         flex-direction: column;
     }
-    
-    .tempo-individual {
-        flex: none;
-        min-width: auto;
-        max-width: 100%;
-        margin-bottom: 15px;
-    }
-    
-    .tempo-individual caption {
-        font-size: 13px;
-        padding: 6px 8px;
-    }
-    
-    .tempo-individual td {
-        padding: 5px 8px !important;
-        font-size: 12px;
-    }
-    
-    /* Outras formas en 1 columna en móbil */
-    .outras-formas-container {
-        flex-direction: column;
-    }
-    
-    .outras-formas-container table {
-        flex: none;
-        max-width: 100%;
-        margin-bottom: 15px;
-    }
-    
-    .outras-formas-grid {
-        grid-template-columns: 1fr;
-        grid-template-rows: repeat(4, auto);
-    }
-    
-    .outras-formas-grid .tabimperativo {
-        grid-column: 1;
-        grid-row: 1;
-    }
-    
-    .outras-formas-grid .tabinfinitivo {
-        grid-column: 1;
-        grid-row: 2;
-    }
-    
-    .outras-formas-grid .tabxerundio {
-        grid-column: 1;
-        grid-row: 3;
-    }
-    
-    .outras-formas-grid .tabparticipio {
-        grid-column: 1;
-        grid-row: 4;
-    }
-    
-    .tabla-outras-formas caption,
-    .tabla-forma-simple caption {
-        font-size: 13px;
-        padding: 8px;
-    }
-    
-    .tabla-outras-formas td:not(.sepaconxug),
-    .tabla-forma-simple td {
-        padding: 8px 10px;
-        font-size: 13px;
-    }
-    
-    .titulo-modo {
-        font-size: 18px;
-    }
-}
 
-@media (max-width: 480px) {
-    .dicionario-rag-container {
-        padding: 10px;
+    .dicionario-rag-container .dicionario-rag-input,
+    .dicionario-rag-container .dicionario-rag-campos button {
+        flex: none;
+        width: 100%;
+        min-width: auto;
     }
-    
-    .palabra-titulo {
-        font-size: 20px;
+
+    .dicionario-rag-container .conxugacion-container .tempo-individual {
+        flex: none;
+        min-width: auto;
+        max-width: 100%;
+        width: 100%;
     }
-    
-    #resultado h4 {
-        font-size: 16px;
+
+    .dicionario-rag-container .outras-formas-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .dicionario-rag-container .outras-formas-grid .tabimperativo,
+    .dicionario-rag-container .outras-formas-grid .tabinfinitivo,
+    .dicionario-rag-container .outras-formas-grid .tabxerundio,
+    .dicionario-rag-container .outras-formas-grid .tabparticipio {
+        grid-column: 1;
+        grid-row: auto;
     }
 }

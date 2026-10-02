@@ -5,6 +5,38 @@ Todos os cambios relevantes no plugin Dicionario RAG quedarán documentados nest
 O formato baséase en [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),  
 e este proxecto segue as normas de [Versionado Semántico](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-10-02
+
+### Seguridade
+- O HTML da conxugación que vén da RAG fíltrase con `wp_kses` antes de mostralo (sen scripts nin eventos)
+- Validación da palabra: só letras, espazos, guións e apóstrofos (os verbos, unha soa palabra)
+- Límite de peticións á RAG por IP (30 cada 10 minutos, só para consultas non cacheadas)
+- Eliminado o nonce, que caducaba nas páxinas cacheadas (é unha consulta pública de só lectura)
+
+### Rendemento
+- Caché das consultas con transients (1 semana; 1 día para palabras non atopadas)
+- O authToken gárdase na caché en vez de descargar a portada da RAG en cada conxugación
+- O CSS e o JS só se cargan nas páxinas co shortcode
+- Eliminada a importación de Google Fonts
+
+### Corrixido
+- As definicións agrúpanse por categoría gramatical (antes só se mostraba a primeira)
+- As acepcións das frases feitas xa non aparecen mesturadas coas definicións principais
+- Móstranse as remisións ("Véxase: …") en entradas e frases feitas que antes saían baleiras
+- Pronomes das táboas de conxugación: o contador reiníciase por táboa, o xerundio non leva pronome e o participio mostra xénero e número
+- Verbos con maiúsculas acentuadas (`PÓR`) usando `mb_strtolower`
+- Premer Enter facía dúas peticións
+- O botón "Definición" cambiaba a "Consultar" despois de cada busca; agora desactívanse os dous botóns durante a consulta
+- Varios shortcodes na mesma páxina xa non comparten IDs
+- Peticións coa API HTTP de WordPress (`wp_remote_post`) en vez de cURL: respecta o proxy do sitio, descomprime as respostas e evita `curl_close()`, obsoleta en PHP 8.5
+
+### Cambiado
+- Os estilos herdan do tema (tipografía, cores, botóns `wp-element-button` e títulos); personalizables con variables CSS
+- User-Agent identificable do plugin en vez de simular un navegador
+- Tempo máximo de espera reducido de 30 a 15 segundos
+- Probado ata WordPress 7.1 e PHP 8.4
+- Engadido `uninstall.php`, que borra os transients do plugin
+
 ## [1.0.0] - 2025-01-28
 
 ### Engadido
